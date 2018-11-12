@@ -1,0 +1,175 @@
+---
+title: "Trabalho_Séries"
+output: html_document
+---
+```{r packages, include = F}
+packages <- c("data.table","ggplot2","zoo","astsa","xtable")
+for(i in 1:length(packages)){
+  if(!(packages[i] %in% installed.packages()))
+    install.packages(packages[i])
+  library(packages[i],character.only=TRUE)
+}
+```
+
+
+```{r month_function}
+add.months= function(date,n) seq(date, by = paste (n, "months"), length = 2)[2]
+
+```
+
+
+```{r read_data_serie1, include = F}
+serie1 <- fread("monthly-new-york-city-average-te.csv")
+names(serie1) <- c("Month","Temperature")
+serie1$Month <- as.yearmon(serie1$Month)
+serie1$Month <- as.Date(serie1$Month)
+serie1$T <- c(1:nrow(serie1))
+serie1 <- serie1[-which(year(serie1$Month)==last(year(serie1$Month))),]
+```
+
+```{r plot_serie1, echo = F}
+ggplot(data = serie1, aes(x = Month, y = Temperature))+
+  geom_line()+
+  theme_minimal()+
+  ggtitle("Monthly Temperature in New York")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+```{r serie1_analysis, echo = F}
+
+tam <- nrow(serie1)        # tamanho da serie
+t.1 <- seq(1:tam)           # tendencia
+n.p <- tam/12                # numero de periodos
+nu <- 1/12
+
+
+fit <- lm(Temperature ~  sin(2*pi*nu*T) + cos(2*pi*nu*T),data = serie1) #Regressão harmônica
+
+model <- data.table(predicted = predict(fit), T = serie1$T)
+model$Month <- serie1[match(model$T, serie1$T), "Month"]
+
+
+ggplot(data = serie1, aes(x = Month, y = Temperature))+
+  geom_line()+
+  theme_minimal()+
+  ggtitle("Monthly Temperature in New York")+
+  theme(plot.title = element_text(hjust = 0.5))+
+  geom_line(data = model,aes(x= Month,y = predicted),col = "red")
+
+```
+
+
+
+```{r serie1_model_residual, echo = F}
+
+xtable(summary(fit))
+
+
+acf2(fit$residuals)
+
+```
+
+```{r predict_serie1}
+newdata_serie1 <- data.frame(T=157:168)
+predict_serie1 <- data.frame(predicted=predict(fit,newdata_serie1),T = newdata_serie1)
+
+model <- rbind(model,predict_serie1,fill = T)
+
+
+for (i in 157: 168){
+  model$Month[i] <- add.months(model$Month[i-1],1)
+}
+
+ggplot(data = serie1, aes(x = Month, y = Temperature))+
+  geom_line()+
+  theme_minimal()+
+  ggtitle("Monthly Temperature in New York")+
+  theme(plot.title = element_text(hjust = 0.5))+
+  geom_line(data = model,aes(x= Month,y = predicted),col = "red")
+
+```
+
+
+
+```{r read_data_serie2, include = F}
+serie2 <- fread("ozon-concentration-downtown-l-a-.csv")
+names(serie2) <- c("Month","Ozone")
+serie2$Month <- as.yearmon(serie2$Month)
+serie2$Month <- as.Date(serie2$Month)
+serie2$T <- c(1:nrow(serie2))
+serie2 <- serie2[-which(year(serie2$Month)==last(year(serie2$Month))),]
+
+```
+
+```{r plot_serie2, echo = F}
+ggplot(data = serie2, aes(x = Month, y = Ozone))+
+  geom_line()+
+  theme_minimal()+
+  ggtitle("Monthly Temperature in New York")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r serie2_analysis, echo = F}
+tam.2 <- nrow(serie2)        # tamanho da serie
+t.2 <- seq(1:tam.2)           # tendencia
+n.p.2 <- tam.2/12                # numero de periodos
+nu.2 <- 1/12
+
+
+fit2 <- lm(Ozone ~ T + sin(2*pi*nu.2*T) + cos(2*pi*nu.2*T),data = serie2)
+
+model2 <- data.table(predicted = predict(fit2), T = serie2$T)
+model2$Month <- serie2[match(model2$T, serie2$T), "Month"]
+
+ggplot(data = serie2, aes(x = Month, y = Ozone))+
+  geom_line()+
+  theme_minimal()+
+  ggtitle("Monthly Temperature in New York")+
+  theme(plot.title = element_text(hjust = 0.5))+
+  geom_line(data = model2,aes(x= Month,y = predicted),col = "red")
+```
+
+```{r serie2_model_residual, echo = F}
+acf2(fit2$residuals)
+y <- sarima(fit2$residuals,1,0,0)#choose by test/error
+fitted <- as.numeric(fit2$residuals-resid(y$fit))
+
+model2$predicted <- model2$predicted+fitted
+
+ggplot(data = serie2, aes(x = Month, y = Ozone))+
+  geom_line()+
+  theme_minimal()+
+  ggtitle("Monthly Temperature in New York")+
+  theme(plot.title = element_text(hjust = 0.5))+
+  geom_line(data = model2,aes(x= Month,y = predicted),col = "red")
+
+
+
+```
+
+```{r prediction_serie2}
+newdata_serie2 <- data.frame(T=205:216)
+predict_serie2 <- data.frame(predicted=predict(fit2,newdata_serie2),T = newdata_serie2)
+model2 <- rbind(model2,predict_serie2,fill = T)
+
+res_prev <- sarima.for(fit2$residuals,1,0,0,n.ahead = 12)
+predicted_residual <- as.numeric(res_prev$pred)
+
+model2$predicted <- model2$predicted+predicted_residual
+
+
+for (i in 205: 216){
+  model2$Month[i] <- add.months(model2$Month[i-1],1)
+}
+
+ggplot(data = serie2, aes(x = Month, y = Ozone))+
+  geom_line()+
+  theme_minimal()+
+  ggtitle("Monthly Temperature in New York")+
+  theme(plot.title = element_text(hjust = 0.5))+
+  geom_line(data = model2,aes(x= Month,y = predicted),col = "red")
+
+```
+
+
